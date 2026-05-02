@@ -176,6 +176,13 @@ export default function Analysis() {
           <div className="p-4 bg-muted/30 rounded-lg border border-border/50 text-foreground/80 font-mono text-sm leading-relaxed">
             {result.summary}
           </div>
+
+          {(result as any).disclaimer && (
+            <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-blue-500/8 border border-blue-500/20 text-blue-300/80 font-mono text-xs leading-relaxed">
+              <ShieldCheck className="w-3.5 h-3.5 shrink-0 mt-0.5 text-blue-400" />
+              <span>{(result as any).disclaimer}</span>
+            </div>
+          )}
         </div>
 
         <Card className="w-full lg:w-72 shrink-0 border-border/50 shadow-xl bg-card/80 backdrop-blur-sm relative overflow-hidden">

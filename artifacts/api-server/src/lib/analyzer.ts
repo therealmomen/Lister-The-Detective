@@ -8,6 +8,7 @@ export interface AnalysisResult {
   overallTrustScore: number;
   verdict: "recommended" | "caution" | "avoid";
   summary: string;
+  disclaimer: string;
   sellerAnalysis: string;
   specsAnalysis: string;
   reviewsAnalysis: string;
@@ -15,6 +16,7 @@ export interface AnalysisResult {
   redFlags: Array<{
     severity: "low" | "medium" | "high";
     description: string;
+    basis: "known_fact" | "pattern" | "inference";
   }>;
   alternatives: Array<{
     title: string;
@@ -56,33 +58,21 @@ function detectPlatform(url: string): string | null {
   return null;
 }
 
-/**
- * Try to extract a human-readable product name from a full e-commerce URL.
- * e.g. amazon.eg/.../Crash-C3000-Laptop-Cooling-Fan/dp/B0GJLR7TDK → "Crash C3000 Laptop Cooling Fan"
- */
 function extractProductNameFromUrl(url: string): string | null {
   try {
     const parsed = new URL(url);
     const segments = parsed.pathname.split("/").filter(Boolean);
-
-    // Amazon pattern: .../[slug]/dp/[ASIN]
     const dpIndex = segments.findIndex((s) => s === "dp");
     if (dpIndex > 0) {
       const slug = segments[dpIndex - 1];
-      if (slug && slug.length > 3 && !slug.startsWith("B0")) {
+      if (slug && slug.length > 3 && !slug.startsWith("B0") && !/^\d+$/.test(slug)) {
         return slug.replace(/-/g, " ").replace(/\s+/g, " ").trim();
       }
     }
-
-    // eBay pattern: .../itm/[slug]/[id]
     const itmIndex = segments.findIndex((s) => s === "itm");
-    if (itmIndex >= 0 && segments[itmIndex + 1]) {
-      const slug = segments[itmIndex + 1];
-      if (slug && !slug.match(/^\d+$/)) {
-        return slug.replace(/-/g, " ").replace(/\s+/g, " ").trim();
-      }
+    if (itmIndex >= 0 && segments[itmIndex + 1] && !/^\d+$/.test(segments[itmIndex + 1])) {
+      return segments[itmIndex + 1].replace(/-/g, " ").replace(/\s+/g, " ").trim();
     }
-
     return null;
   } catch {
     return null;
@@ -92,18 +82,12 @@ function extractProductNameFromUrl(url: string): string | null {
 function generateSearchUrl(platform: string, productTitle: string): string {
   const query = encodeURIComponent(productTitle);
   switch (platform.toLowerCase()) {
-    case "amazon":
-      return `https://www.amazon.eg/s?k=${query}`;
-    case "noon":
-      return `https://www.noon.com/egypt-en/search/?q=${query}`;
-    case "ebay":
-      return `https://www.ebay.com/sch/i.html?_nkw=${query}`;
-    case "alibaba":
-      return `https://www.alibaba.com/trade/search?SearchText=${query}`;
-    case "aliexpress":
-      return `https://www.aliexpress.com/wholesale?SearchText=${query}`;
-    default:
-      return `https://www.google.com/search?q=${encodeURIComponent(productTitle + " " + platform)}`;
+    case "amazon":    return `https://www.amazon.eg/s?k=${query}`;
+    case "noon":      return `https://www.noon.com/egypt-en/search/?q=${query}`;
+    case "ebay":      return `https://www.ebay.com/sch/i.html?_nkw=${query}`;
+    case "alibaba":   return `https://www.alibaba.com/trade/search?SearchText=${query}`;
+    case "aliexpress":return `https://www.aliexpress.com/wholesale?SearchText=${query}`;
+    default:          return `https://www.google.com/search?q=${encodeURIComponent(productTitle + " " + platform)}`;
   }
 }
 
@@ -113,76 +97,91 @@ export async function analyzeProduct(
   platforms: string[],
   country: string | null | undefined
 ): Promise<AnalysisResult> {
-  // Short URLs must be rejected before reaching this function — but guard here too
   if (url && isShortUrl(url)) {
     throw new Error(
-      "Short links cannot be analyzed. Please open the product page in your browser, copy the full URL from the address bar, and paste that instead."
+      "Short links cannot be analyzed. Please open the product in your browser and copy the full URL from the address bar."
     );
   }
 
   const platformDetected = url ? detectPlatform(url) : null;
   const platformsForAlts = platforms.length > 0 ? platforms : ["amazon", "ebay"];
   const countryContext = country === "EG" ? "Egypt" : country || "international";
-
-  // Extract product name from URL slug to give AI more context
   const extractedName = url ? extractProductNameFromUrl(url) : null;
 
-  const productContext = url
-    ? [
-        `Product URL: ${url}`,
-        platformDetected ? `Platform: ${platformDetected}` : "",
-        extractedName ? `Product name extracted from URL: "${extractedName}"` : "",
-      ]
-        .filter(Boolean)
-        .join("\n")
-    : `Product search query: "${query}"`;
+  const productContext = [
+    url ? `Product URL: ${url}` : null,
+    platformDetected ? `Platform detected: ${platformDetected}` : null,
+    extractedName ? `Product name from URL path: "${extractedName}"` : null,
+    !url && query ? `User search query: "${query}"` : null,
+  ].filter(Boolean).join("\n");
 
-  const prompt = `You are Lister, an expert AI product research analyst for shoppers in ${countryContext}. Analyze the following product and return a full report in ENGLISH ONLY.
+  const prompt = `You are Lister the Detective — an AI product research analyst for shoppers in ${countryContext}.
 
+WHAT YOU ARE ANALYZING:
 ${productContext}
 
-TASK:
-1. Analyze this specific product listing — assess seller trustworthiness, spec accuracy, review authenticity, and brand reputation.
-2. Find the EXACT SAME product on other platforms so the user can compare where to buy it from the most trustworthy source. Do NOT suggest different products — only the same product from different platforms or sellers.
+YOUR KNOWLEDGE MODEL — READ CAREFULLY:
+You cannot browse the internet or visit URLs. You work entirely from your training knowledge about:
+- Brand histories, reputations, and known quality patterns
+- Typical seller behavior and platform norms on Amazon, Noon, eBay, and Alibaba
+- Common product category quality issues (e.g. generic cooling pads, wireless earbuds, etc.)
+- Price ranges and value expectations in Egypt and the Middle East
+- Known product lines, model numbers, and their real-world performance track record
 
-CRITICAL RULES — MUST FOLLOW:
-- Your ENTIRE response must be in ENGLISH. No Arabic, no other language. English only.
-- Return ONLY raw JSON — no markdown, no code fences, no explanation. Just the JSON object.
-- All text fields (summary, analyses, red flag descriptions, whyBetter) must be in English.
-- Prices must be in EGP (Egyptian Pounds) for ${countryContext === "Egypt" ? "Egypt" : countryContext}.
+HONESTY RULES — NON-NEGOTIABLE:
+1. NEVER invent specific numbers you do not know (exact seller ratings, precise review counts, specific listing prices). Use ranges or "unknown" instead.
+2. NEVER claim to have "seen the listing" or "checked the seller" — you have not. You analyze what you know about the brand, product category, and platform patterns.
+3. If you do not recognize a brand or product, say so clearly and explain what that means (unknown brands carry higher risk).
+4. Every red flag must state its basis: is it a KNOWN FACT (documented product/brand issue), a PATTERN (typical behavior for this category/platform), or an INFERENCE (logical reasoning from available info)?
+5. Trust scores must reflect actual knowledge, not guesses. Unknown brands should score lower. Well-documented brands score higher.
+6. Price estimates should reflect real Egyptian market ranges you have knowledge of, or state "Market price unknown — verify before purchasing."
 
-Return this exact JSON structure:
+ANALYSIS FRAMEWORK:
+- Seller analysis: What do you know about how this platform handles this type of seller/product? What are the platform's own policies for this category?
+- Specs analysis: Are the specs consistent with what's technically possible at this price tier? Does the model number match a known real product?
+- Reviews analysis: Based on this brand's history, are reviews typically trustworthy? What patterns does this product category show?
+- Brand trust: Do you have actual knowledge of this brand's reputation, manufacturing quality, warranty practices, and Egyptian market presence?
+
+ALTERNATIVES MISSION:
+Find the EXACT SAME product on other platforms (not a different product — the same one). If you don't know the product well enough to confirm availability on a specific platform, say "Check availability" in whyBetter rather than making up a listing.
+
+Return ONLY this exact JSON structure. English only. No markdown. No code fences:
 {
-  "productTitle": "Full English product name",
-  "brand": "Brand name",
-  "platform": ${platformDetected ? `"${platformDetected}"` : "detected platform name or null"},
-  "estimatedPrice": "price range in EGP e.g. EGP 2,500-3,200",
-  "overallTrustScore": <integer 0-100>,
+  "productTitle": "Official product name as sold (based on URL/query info)",
+  "brand": "Brand name, or 'Unknown Brand' if not recognized",
+  "platform": ${platformDetected ? `"${platformDetected}"` : "detected platform or null"},
+  "estimatedPrice": "EGP range based on market knowledge, or 'Verify price — not in training data'",
+  "overallTrustScore": <integer 0-100 based strictly on what you know>,
   "verdict": "recommended" | "caution" | "avoid",
-  "summary": "2-3 English sentences summarizing the analysis",
-  "sellerAnalysis": "English analysis of seller trustworthiness, return policy, and red flags",
-  "specsAnalysis": "English analysis of whether specs are realistic for this price and category",
-  "reviewsAnalysis": "English analysis of review authenticity and common buyer feedback",
-  "brandTrustAnalysis": "English analysis of brand reputation, warranty, and local support in ${countryContext}",
+  "summary": "2-3 honest sentences: what you know about this product/brand, key concern or confidence, and buying recommendation",
+  "disclaimer": "One sentence explaining what this analysis is based on (your training knowledge) and what the user should verify themselves",
+  "sellerAnalysis": "What you know about how ${platformDetected || "this platform"} handles this product category — policies, typical seller behavior, return/refund norms. Be honest about what you don't know about THIS specific seller.",
+  "specsAnalysis": "Are these specs consistent with a real, known product? What does the model number tell you? Flag spec claims that are unrealistic for the price tier.",
+  "reviewsAnalysis": "Based on what you know about this brand and product category, are reviews in this space typically trustworthy? What should the buyer look for or be cautious of?",
+  "brandTrustAnalysis": "Everything you actually know about this brand: origin, manufacturing reputation, warranty practices, market presence in ${countryContext}. If brand is unknown, explain the implications.",
   "redFlags": [
-    { "severity": "high" | "medium" | "low", "description": "Specific English red flag description" }
+    {
+      "severity": "high" | "medium" | "low",
+      "description": "Specific, grounded flag — cite why this is a concern",
+      "basis": "known_fact" | "pattern" | "inference"
+    }
   ],
   "alternatives": [
     {
-      "title": "Exact same product name in English",
+      "title": "Same product name on this platform",
       "platform": "one of: ${platformsForAlts.join(", ")}",
       "url": null,
-      "price": "estimated price in EGP on this platform",
-      "rating": <number like 4.5 or null>,
-      "brand": "Same brand as the analyzed product",
-      "whyBetter": "English explanation of why buying from this platform/seller is better — price, seller rating, official distributor, return policy, warranty, etc.",
+      "price": "EGP estimate or 'Varies — check platform'",
+      "rating": null,
+      "brand": "Same brand",
+      "whyBetter": "Specific reason based on what you know about this platform's handling of this product — price advantage, official distributor status, return policy, warranty support",
       "trustScore": <integer 0-100>
     }
   ]
 }
 
-Score rules: 70-100 = recommended, 40-69 = caution, 0-39 = avoid. Verdict must match the score.
-Provide 2-4 specific red flags and 3-5 alternatives of the SAME product across: ${platformsForAlts.join(", ")}.`;
+Score guide: 75-100 = recommended (solid track record, trustworthy brand, platform suits it), 45-74 = caution (some concerns, proceed carefully), 0-44 = avoid (significant known issues or too many unknowns for the risk level).
+Provide 2-4 red flags with their basis clearly stated. Provide 3-5 alternatives of the SAME product across: ${platformsForAlts.join(", ")}.`;
 
   const response = await openai.chat.completions.create({
     model: "gpt-5.4",
@@ -190,8 +189,11 @@ Provide 2-4 specific red flags and 3-5 alternatives of the SAME product across: 
     messages: [
       {
         role: "system",
-        content:
-          "You are a product research expert. You ALWAYS respond in ENGLISH ONLY — never Arabic, never any other language regardless of the product's region or origin. You always respond with raw JSON only, no markdown, no code blocks.",
+        content: `You are Lister the Detective — a product research AI that ONLY states things it actually knows from training data. 
+You NEVER hallucinate specific numbers, ratings, or listing details you cannot verify.
+You ALWAYS respond in ENGLISH ONLY — never Arabic or any other language.
+You ALWAYS respond with raw JSON only — no markdown, no code blocks, no preamble.
+When uncertain, you express that uncertainty honestly rather than making something up.`,
       },
       {
         role: "user",
@@ -201,9 +203,7 @@ Provide 2-4 specific red flags and 3-5 alternatives of the SAME product across: 
   });
 
   const content = response.choices[0]?.message?.content;
-  if (!content) {
-    throw new Error("No response from AI");
-  }
+  if (!content) throw new Error("No response from AI");
 
   let jsonStr = content.trim();
   if (jsonStr.startsWith("```")) {
@@ -216,15 +216,16 @@ Provide 2-4 specific red flags and 3-5 alternatives of the SAME product across: 
     throw new Error("Invalid analysis result structure");
   }
 
-  if (parsed.overallTrustScore >= 70) {
+  // Enforce score ↔ verdict consistency
+  if (parsed.overallTrustScore >= 75) {
     parsed.verdict = "recommended";
-  } else if (parsed.overallTrustScore >= 40) {
+  } else if (parsed.overallTrustScore >= 45) {
     parsed.verdict = "caution";
   } else {
     parsed.verdict = "avoid";
   }
 
-  // Generate real search URLs for all alternatives
+  // Generate real search URLs for alternatives
   if (parsed.alternatives) {
     for (const alt of parsed.alternatives) {
       if (!alt.url) {

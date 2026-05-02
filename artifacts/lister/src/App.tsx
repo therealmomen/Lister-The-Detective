@@ -8,6 +8,7 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import Analysis from "@/pages/analysis";
 import History from "@/pages/history";
+import About from "@/pages/about";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/analysis/:id" component={Analysis} />
       <Route path="/history" component={History} />
+      <Route path="/about" component={About} />
       <Route component={NotFound} />
     </Switch>
   );

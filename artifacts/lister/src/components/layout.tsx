@@ -55,6 +55,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
             >
               History
             </Link>
+            <Link
+              href="/about"
+              className={cn(
+                "transition-colors hover:text-foreground/80 whitespace-nowrap",
+                location === "/about" ? "text-foreground" : "text-foreground/60"
+              )}
+            >
+              About
+            </Link>
           </nav>
 
           {/* Theme toggle — always at the far right with clear separation */}
