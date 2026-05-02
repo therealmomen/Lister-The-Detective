@@ -3,13 +3,15 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Lister - AI-powered product listing analyzer
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: analyses
+    description: Product listing analysis operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,115 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /analyses:
+    get:
+      operationId: listAnalyses
+      tags: [analyses]
+      summary: List recent analyses
+      description: Returns a list of recent product analyses
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of analyses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Analysis"
+
+    post:
+      operationId: createAnalysis
+      tags: [analyses]
+      summary: Submit a product for analysis
+      description: Analyze a product listing URL or search query using AI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAnalysisBody"
+      responses:
+        "201":
+          description: Analysis created (may be in progress)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Analysis"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /analyses/stats:
+    get:
+      operationId: getAnalysisStats
+      tags: [analyses]
+      summary: Get analysis statistics
+      description: Returns overall stats about analyses performed
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisStats"
+
+  /analyses/{id}:
+    get:
+      operationId: getAnalysis
+      tags: [analyses]
+      summary: Get a specific analysis
+      description: Returns the full analysis result for a given ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Analysis result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Analysis"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      operationId: deleteAnalysis
+      tags: [analyses]
+      summary: Delete an analysis
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +145,181 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    CreateAnalysisBody:
+      type: object
+      properties:
+        url:
+          type: ["string", "null"]
+          description: Product listing URL (Amazon, eBay, Noon, Alibaba)
+        query:
+          type: ["string", "null"]
+          description: Product search query or name
+        platforms:
+          type: array
+          items:
+            type: string
+            enum: [amazon, ebay, noon, alibaba]
+          description: Platforms to search for alternatives
+        country:
+          type: ["string", "null"]
+          description: User's country for regional context (e.g. EG for Egypt)
+
+    Alternative:
+      type: object
+      properties:
+        title:
+          type: string
+        platform:
+          type: string
+        url:
+          type: ["string", "null"]
+        price:
+          type: ["string", "null"]
+        rating:
+          type: ["number", "null"]
+        brand:
+          type: string
+        whyBetter:
+          type: string
+        trustScore:
+          type: integer
+      required:
+        - title
+        - platform
+        - brand
+        - whyBetter
+        - trustScore
+
+    RedFlag:
+      type: object
+      properties:
+        severity:
+          type: string
+          enum: [low, medium, high]
+        description:
+          type: string
+      required:
+        - severity
+        - description
+
+    AnalysisResult:
+      type: object
+      properties:
+        productTitle:
+          type: string
+        brand:
+          type: string
+        platform:
+          type: ["string", "null"]
+        estimatedPrice:
+          type: ["string", "null"]
+        overallTrustScore:
+          type: integer
+          description: 0-100 trust score
+        verdict:
+          type: string
+          enum: [recommended, caution, avoid]
+        summary:
+          type: string
+        sellerAnalysis:
+          type: string
+        specsAnalysis:
+          type: string
+        reviewsAnalysis:
+          type: string
+        brandTrustAnalysis:
+          type: string
+        redFlags:
+          type: array
+          items:
+            $ref: "#/components/schemas/RedFlag"
+        alternatives:
+          type: array
+          items:
+            $ref: "#/components/schemas/Alternative"
+      required:
+        - productTitle
+        - brand
+        - overallTrustScore
+        - verdict
+        - summary
+        - sellerAnalysis
+        - specsAnalysis
+        - reviewsAnalysis
+        - brandTrustAnalysis
+        - redFlags
+        - alternatives
+
+    Analysis:
+      type: object
+      properties:
+        id:
+          type: integer
+        url:
+          type: ["string", "null"]
+        query:
+          type: ["string", "null"]
+        platforms:
+          type: array
+          items:
+            type: string
+        country:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        result:
+          $ref: "#/components/schemas/AnalysisResult"
+        errorMessage:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - platforms
+        - status
+        - createdAt
+        - updatedAt
+
+    AnalysisStats:
+      type: object
+      properties:
+        totalAnalyses:
+          type: integer
+        completedAnalyses:
+          type: integer
+        avgTrustScore:
+          type: ["number", "null"]
+        topPlatforms:
+          type: array
+          items:
+            type: object
+            properties:
+              platform:
+                type: string
+              count:
+                type: integer
+            required:
+              - platform
+              - count
+        recentActivity:
+          type: array
+          items:
+            $ref: "#/components/schemas/Analysis"
+      required:
+        - totalAnalyses
+        - completedAnalyses
+        - topPlatforms
+        - recentActivity
