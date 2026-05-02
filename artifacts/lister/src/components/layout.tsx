@@ -27,7 +27,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans">
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-14 max-w-screen-2xl items-center px-4 gap-4">
+        <div className="flex h-14 w-full items-center px-4 gap-4">
           {/* Brand — stacked on mobile, single line on desktop */}
           <Link href="/" className="shrink-0 flex items-center">
             {/* Mobile: two-line stacked */}
