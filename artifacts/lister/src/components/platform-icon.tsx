@@ -1,26 +1,57 @@
-export function PlatformIcon({ platform, className = "" }: { platform: string; className?: string }) {
-  const normalizedPlatform = platform.toLowerCase();
+type LogoConfig = {
+  src: string;
+  bg: string; // background color so the logo is always legible
+  fit?: "contain" | "cover";
+};
 
-  const platforms: Record<string, { color: string; abbr: string }> = {
-    amazon:     { color: "#FF9900", abbr: "A" },
-    ebay:       { color: "#E53238", abbr: "e" },
-    noon:       { color: "#FEEE00", abbr: "N" },
-    alibaba:    { color: "#FF6A00", abbr: "阿" },
-    aliexpress: { color: "#E43225", abbr: "AE" },
-  };
+const logos: Record<string, LogoConfig> = {
+  amazon:     { src: "/logos/amazon.png",  bg: "#ffffff" },
+  ebay:       { src: "/logos/ebay.png",    bg: "#ffffff" },
+  noon:       { src: "/logos/noon.png",    bg: "#ffffff" },
+  alibaba:    { src: "/logos/alibaba.png", bg: "#ffffff" },
+  aliexpress: { src: "/logos/alibaba.png", bg: "#ffffff" },
+};
 
-  const match = Object.entries(platforms).find(([key]) =>
-    normalizedPlatform.includes(key)
-  );
+export function PlatformIcon({
+  platform,
+  className = "",
+  size = 20,
+}: {
+  platform: string;
+  className?: string;
+  size?: number;
+}) {
+  const key = Object.keys(logos).find((k) => platform.toLowerCase().includes(k));
+  const logo = key ? logos[key] : null;
 
-  const { color, abbr } = match ? match[1] : { color: "#888", abbr: platform[0]?.toUpperCase() ?? "?" };
+  if (logo) {
+    return (
+      <span
+        className={`inline-flex items-center justify-center rounded overflow-hidden shrink-0 ${className}`}
+        style={{
+          width: size,
+          height: size,
+          background: logo.bg,
+          padding: 2,
+        }}
+      >
+        <img
+          src={logo.src}
+          alt={platform}
+          style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+          draggable={false}
+        />
+      </span>
+    );
+  }
 
+  // Fallback: initial badge
   return (
     <span
-      className={`inline-flex items-center justify-center rounded-sm font-bold text-[9px] leading-none ${className}`}
-      style={{ background: color, color: color === "#FEEE00" ? "#000" : "#fff", width: 16, height: 16, flexShrink: 0 }}
+      className={`inline-flex items-center justify-center rounded-sm font-bold text-[9px] leading-none bg-muted text-muted-foreground shrink-0 ${className}`}
+      style={{ width: size, height: size }}
     >
-      {abbr}
+      {platform[0]?.toUpperCase() ?? "?"}
     </span>
   );
 }
