@@ -28,10 +28,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background flex flex-col font-sans">
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-14 max-w-screen-2xl items-center px-4 gap-4">
-          {/* Brand — always single line */}
+          {/* Brand — stacked on mobile, single line on desktop */}
           <Link href="/" className="shrink-0 flex items-center">
-            <span className="font-black tracking-tight text-sm sm:text-base leading-none whitespace-nowrap">
-              LISTER <span className="text-primary">THE DETECTIVE</span>
+            {/* Mobile: two-line stacked */}
+            <span className="sm:hidden font-black tracking-tight text-sm leading-[1.1]">
+              <span className="block">LISTER THE</span>
+              <span className="block">DETECTIVE</span>
+            </span>
+            {/* Desktop: single line */}
+            <span className="hidden sm:block font-black tracking-tight text-base leading-none whitespace-nowrap">
+              LISTER THE DETECTIVE
             </span>
           </Link>
 
