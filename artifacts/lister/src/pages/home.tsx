@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,7 +16,6 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PlatformIcon } from "@/components/platform-icon";
 
 const SHORT_URL_HOSTS = ["amzn.eu", "amzn.to", "a.co", "bit.ly", "tinyurl.com", "goo.gl", "t.co", "ow.ly", "rb.gy"];
@@ -32,18 +30,16 @@ function isShortUrl(value: string): boolean {
 }
 
 const formSchema = z.object({
-  input: z
+  url: z
     .string()
-    .min(3, "Please enter a valid URL or search query")
+    .min(3, "Please paste a full product URL")
     .refine(
-      (val) => {
-        const looksLikeUrl = val.startsWith("http://") || val.startsWith("https://");
-        return !looksLikeUrl || !isShortUrl(val);
-      },
-      {
-        message:
-          "Short links can't be analyzed. Open the product in your browser and copy the full URL from the address bar.",
-      }
+      (val) => val.startsWith("http://") || val.startsWith("https://"),
+      { message: "Must be a full URL starting with http:// or https://" }
+    )
+    .refine(
+      (val) => !isShortUrl(val),
+      { message: "Short links can't be analyzed. Copy the full URL from your browser's address bar." }
     ),
   platforms: z
     .array(z.enum(["amazon", "ebay", "noon", "alibaba"]))
@@ -52,7 +48,6 @@ const formSchema = z.object({
 
 export default function Home() {
   const [, setLocation] = useLocation();
-  const [inputType, setInputType] = useState<"url" | "query">("url");
 
   const createAnalysis = useCreateAnalysis();
   const { data: stats } = useGetAnalysisStats();
@@ -60,19 +55,17 @@ export default function Home() {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      input: "",
+      url: "",
       platforms: ["amazon", "noon"],
     },
   });
 
   function onSubmit(values: z.infer<typeof formSchema>) {
-    const isUrl = values.input.startsWith("http://") || values.input.startsWith("https://");
-
     createAnalysis.mutate(
       {
         data: {
-          url: isUrl ? values.input : null,
-          query: !isUrl ? values.input : null,
+          url: values.url,
+          query: null,
           platforms: values.platforms as CreateAnalysisBodyPlatformsItem[],
           country: "EG",
         },
@@ -137,60 +130,36 @@ export default function Home() {
             </span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 font-mono">
-            Paste a product URL or describe what you're looking for. We run a full background check and find you the best place to buy it.
+            Paste a product URL from Amazon, Noon, eBay, or Alibaba. We run a full background check and find you the best place to buy it.
           </p>
 
           <Card className="max-w-3xl mx-auto border-border/50 bg-card/50 backdrop-blur-xl shadow-2xl">
             <CardContent className="p-6">
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-                  <Tabs
-                    value={inputType}
-                    onValueChange={(v) => {
-                      setInputType(v as "url" | "query");
-                      form.reset({ input: "", platforms: form.getValues("platforms") });
-                    }}
-                    className="w-full"
-                  >
-                    <TabsList className="grid w-full grid-cols-2 mb-4">
-                      <TabsTrigger value="url" className="font-mono text-xs uppercase tracking-wider">Product URL</TabsTrigger>
-                      <TabsTrigger value="query" className="font-mono text-xs uppercase tracking-wider">Search Query</TabsTrigger>
-                    </TabsList>
-
-                    <FormField
-                      control={form.control}
-                      name="input"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormControl>
-                            <div className="relative">
-                              {inputType === "url" ? (
-                                <LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground h-5 w-5" />
-                              ) : (
-                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground h-5 w-5" />
-                              )}
-                              <Input
-                                placeholder={
-                                  inputType === "url"
-                                    ? "Paste product link here (full URL from browser)..."
-                                    : "e.g. Sony WH-1000XM6 noise cancelling headphones"
-                                }
-                                className="pl-12 h-14 text-base bg-background/50 border-input font-mono"
-                                {...field}
-                              />
-                            </div>
-                          </FormControl>
-                          <FormMessage />
-                          {inputType === "url" && (
-                            <p className="text-[11px] text-muted-foreground/60 font-mono flex items-center gap-1 mt-1">
-                              <AlertCircle className="w-3 h-3 shrink-0" />
-                              Shared/short links (amzn.eu, bit.ly…) won't work — use the full URL from your browser's address bar.
-                            </p>
-                          )}
-                        </FormItem>
-                      )}
-                    />
-                  </Tabs>
+                  <FormField
+                    control={form.control}
+                    name="url"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <div className="relative">
+                            <LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground h-5 w-5" />
+                            <Input
+                              placeholder="Paste product link here (full URL from browser)..."
+                              className="pl-12 h-14 text-base bg-background/50 border-input font-mono"
+                              {...field}
+                            />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                        <p className="text-[11px] text-muted-foreground/60 font-mono flex items-center gap-1 mt-1">
+                          <AlertCircle className="w-3 h-3 shrink-0" />
+                          Shared/short links (amzn.eu, bit.ly…) won't work — use the full URL from your browser's address bar.
+                        </p>
+                      </FormItem>
+                    )}
+                  />
 
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-1">
                     <div className="space-y-2">
@@ -200,19 +169,16 @@ export default function Home() {
                       <div className="flex flex-wrap gap-4">
                         {[
                           { id: "amazon", label: "Amazon" },
-                          { id: "noon", label: "Noon" },
-                          { id: "ebay", label: "eBay" },
-                          { id: "alibaba", label: "Alibaba" },
+                          { id: "noon",   label: "Noon"   },
+                          { id: "ebay",   label: "eBay"   },
+                          { id: "alibaba",label: "Alibaba"},
                         ].map((platform) => (
                           <FormField
                             key={platform.id}
                             control={form.control}
                             name="platforms"
                             render={({ field }) => (
-                              <FormItem
-                                key={platform.id}
-                                className="flex flex-row items-center space-x-2 space-y-0"
-                              >
+                              <FormItem className="flex flex-row items-center space-x-2 space-y-0">
                                 <FormControl>
                                   <Checkbox
                                     checked={field.value?.includes(platform.id as any)}
@@ -276,7 +242,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* How It Works */}
+      {/* What the detective checks */}
       <section className="py-20 bg-muted/20 flex-1 border-t border-border/30">
         <div className="container max-w-6xl mx-auto px-4">
           <div className="text-center mb-12">
