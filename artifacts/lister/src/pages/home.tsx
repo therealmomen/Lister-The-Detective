@@ -120,7 +120,7 @@ export default function Home() {
   return (
     <div className="flex flex-col min-h-full">
       {/* Hero */}
-      <section className="relative py-24 lg:py-32 overflow-hidden bg-background">
+      <section className="relative py-12 sm:py-20 lg:py-28 overflow-hidden bg-background">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-background to-background" />
 
         <div className="container relative z-10 max-w-5xl mx-auto px-4 text-center">
