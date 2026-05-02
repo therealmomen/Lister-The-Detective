@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 
 import { useCreateAnalysis, useGetAnalysisStats } from "@workspace/api-client-react";
+import { addToLocalHistory } from "@/hooks/use-local-history";
 import type { CreateAnalysisBodyPlatformsItem } from "@workspace/api-client-react";
 
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,7 @@ export default function Home() {
       },
       {
         onSuccess: (data) => {
+          addToLocalHistory(data.id);
           setLocation(`/analysis/${data.id}`);
         },
       }
