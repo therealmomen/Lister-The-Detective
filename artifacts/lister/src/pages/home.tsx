@@ -102,7 +102,7 @@ export default function Home() {
                                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground h-5 w-5" />
                               )}
                               <Input 
-                                placeholder={inputType === "url" ? "https://amazon.eg/dp/B0..." : "e.g. Wireless Noise Cancelling Headphones"} 
+                                placeholder={inputType === "url" ? "Paste your product link here..." : "e.g. Sony WH-1000XM6 noise cancelling headphones"} 
                                 className="pl-12 h-14 text-lg bg-background/50 border-input font-mono"
                                 {...field} 
                               />

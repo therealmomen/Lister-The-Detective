@@ -29,12 +29,31 @@ export interface AnalysisResult {
 }
 
 function detectPlatform(url: string): string | null {
-  if (url.includes("amazon.")) return "amazon";
-  if (url.includes("ebay.")) return "ebay";
-  if (url.includes("noon.")) return "noon";
-  if (url.includes("alibaba.")) return "alibaba";
-  if (url.includes("aliexpress.")) return "aliexpress";
+  const lower = url.toLowerCase();
+  if (lower.includes("amazon.") || lower.includes("amzn.")) return "amazon";
+  if (lower.includes("ebay.")) return "ebay";
+  if (lower.includes("noon.")) return "noon";
+  if (lower.includes("alibaba.")) return "alibaba";
+  if (lower.includes("aliexpress.")) return "aliexpress";
   return null;
+}
+
+function generateSearchUrl(platform: string, productTitle: string): string {
+  const query = encodeURIComponent(productTitle);
+  switch (platform.toLowerCase()) {
+    case "amazon":
+      return `https://www.amazon.eg/s?k=${query}`;
+    case "noon":
+      return `https://www.noon.com/egypt-en/search/?q=${query}`;
+    case "ebay":
+      return `https://www.ebay.com/sch/i.html?_nkw=${query}`;
+    case "alibaba":
+      return `https://www.alibaba.com/trade/search?SearchText=${query}`;
+    case "aliexpress":
+      return `https://www.aliexpress.com/wholesale?SearchText=${query}`;
+    default:
+      return `https://www.google.com/search?q=${encodeURIComponent(productTitle + " " + platform)}`;
+  }
 }
 
 export async function analyzeProduct(
@@ -47,58 +66,58 @@ export async function analyzeProduct(
   const platformsForAlts = platforms.length > 0 ? platforms : ["amazon", "ebay"];
   const countryContext = country === "EG" ? "Egypt" : (country || "international");
 
+  const isShortUrl = url && (url.includes("amzn.eu") || url.includes("amzn.to") || url.includes("amzn.com/d"));
+
   const productContext = url
-    ? `Product URL: ${url}${platformDetected ? ` (${platformDetected} listing)` : ""}`
+    ? `Product URL: ${url}${platformDetected ? ` (${platformDetected} listing)` : ""}${isShortUrl ? " — this is a shortened Amazon URL. Identify the product based on the URL structure and use your general knowledge to analyze Amazon listings of this type." : ""}`
     : `Product search query: "${query}"`;
 
-  const prompt = `You are Lister, an expert AI product research analyst. A shopper from ${countryContext} needs help evaluating a product before purchasing.
+  const prompt = `You are Lister, an expert AI product research analyst. A shopper from ${countryContext} needs help evaluating a product listing before purchasing.
 
 ${productContext}
 
-Perform a comprehensive background check on this product listing. Consider:
-- Brand reputation and trustworthiness (especially for generic/Chinese brands)
-- Typical seller practices on this platform
-- Expected build quality based on specs and price range
-- Common complaints and red flags for this product category
-- What makes a genuinely trustworthy option in this category
+Your task has TWO parts:
+PART 1 — Analyze the product listing at the URL (or described by the search query). Assess seller trust, specs honesty, review authenticity, and brand reputation.
+
+PART 2 — Find the EXACT SAME product listed on other platforms or from different/better sellers. The user wants to buy THIS specific product but smarter — from a more trustworthy seller or at a better price. Do NOT suggest different products. If the product is a Sony WH-1000XM5, suggest Sony WH-1000XM5 on Amazon, on Noon, on eBay, etc. — not Bose or Sennheiser alternatives.
 
 Return a JSON object with EXACTLY this structure:
 {
-  "productTitle": "Full product name",
+  "productTitle": "Full product name as it would appear on listings",
   "brand": "Brand name",
-  "platform": ${platformDetected ? `"${platformDetected}"` : "null or detected platform"},
-  "estimatedPrice": "price range in USD or local currency if known",
+  "platform": ${platformDetected ? `"${platformDetected}"` : "detected platform name or null"},
+  "estimatedPrice": "realistic price range in EGP (Egyptian Pounds) if country is Egypt, otherwise in USD",
   "overallTrustScore": <integer 0-100>,
   "verdict": "recommended" | "caution" | "avoid",
-  "summary": "2-3 sentence executive summary of the analysis and buying recommendation",
-  "sellerAnalysis": "Detailed analysis of seller trustworthiness on this platform, typical practices, refund policies, and red flags for this type of seller",
-  "specsAnalysis": "Analysis of the product specifications — are they realistic? Are claimed specs typical for this price point? What specs matter most and what to look for?",
-  "reviewsAnalysis": "Analysis of typical review patterns for this type of product/brand — are reviews usually genuine? What do verified buyers usually say? Common praise and complaints?",
-  "brandTrustAnalysis": "Deep analysis of the brand — its origin, reputation in the market, warranty support, how it compares to established brands, and whether it's trustworthy for buyers in ${countryContext}",
+  "summary": "2-3 sentence executive summary of the listing analysis and whether the user should buy here or look elsewhere",
+  "sellerAnalysis": "Detailed analysis of seller trustworthiness on this platform — typical practices, fulfillment reliability, return/refund policies, and red flags specific to this type of seller",
+  "specsAnalysis": "Are the claimed specs realistic for this price point? What specs matter most for this product category and how does this listing measure up?",
+  "reviewsAnalysis": "Are reviews for this product/seller typically genuine? Common verified-buyer praise and complaints. Signs of review manipulation if any.",
+  "brandTrustAnalysis": "Brand origin, global and local reputation in ${countryContext}, warranty and after-sales support availability, how trustworthy it is for local buyers",
   "redFlags": [
-    { "severity": "high" | "medium" | "low", "description": "specific red flag description" }
+    { "severity": "high" | "medium" | "low", "description": "specific, concrete red flag — not generic advice" }
   ],
   "alternatives": [
     {
-      "title": "Alternative Product Name",
-      "platform": "${platformsForAlts[0] || "amazon"}",
+      "title": "EXACT SAME product name — e.g. Sony WH-1000XM6 Wireless Headphones",
+      "platform": "one of: ${platformsForAlts.join(", ")}",
       "url": null,
-      "price": "estimated price",
-      "rating": <number or null>,
-      "brand": "Brand name",
-      "whyBetter": "Clear, specific explanation of why this is a better choice — mention concrete advantages",
-      "trustScore": <integer 0-100>
+      "price": "estimated price on this platform in EGP or USD",
+      "rating": <average seller/product rating as number, e.g. 4.5, or null>,
+      "brand": "same brand as the analyzed product",
+      "whyBetter": "Why buying this SAME product from THIS platform/seller is a better choice — mention price difference, seller rating, return policy, official distributor status, faster shipping, warranty support, etc.",
+      "trustScore": <integer 0-100 reflecting how trustworthy this specific listing/seller is>
     }
   ]
 }
 
 Rules:
-- overallTrustScore: 70-100 = recommended, 40-69 = caution, 0-39 = avoid. Match verdict to score.
-- Include 2-5 red flags (at minimum mention generic brand risk if applicable)
-- Provide 3-5 alternatives that are genuinely better options, spread across: ${platformsForAlts.join(", ")}
-- Each alternative should have a distinct brand/product positioning (budget pick, best value, premium option)
-- whyBetter must be specific and factual — mention actual advantages (warranty, brand reputation, specs, etc.)
-- Be especially attentive to generic/unbranded products that pose quality risks for buyers in ${countryContext}
+- overallTrustScore: 70-100 = recommended, 40-69 = caution, 0-39 = avoid. Verdict must match score.
+- Include 2-4 specific red flags for THIS listing (not generic category warnings)
+- Provide 3-5 alternatives of the EXACT SAME product across different platforms: ${platformsForAlts.join(", ")}
+- Each alternative must be the same product, just on a different platform or from a better seller
+- whyBetter must explain why THIS platform/seller is better for THIS product specifically (price, official status, warranty, return policy, etc.)
+- Price must be in EGP for Egyptian context — typical range, not a fixed price
 - ONLY return valid JSON, no markdown, no explanation outside the JSON`;
 
   const response = await openai.chat.completions.create({
@@ -107,7 +126,7 @@ Rules:
     messages: [
       {
         role: "system",
-        content: "You are a product research expert. Always respond with valid JSON only — no markdown formatting, no code blocks, just raw JSON.",
+        content: "You are a product research expert specializing in Egyptian e-commerce. Always respond with valid JSON only — no markdown formatting, no code blocks, just raw JSON.",
       },
       {
         role: "user",
@@ -121,7 +140,13 @@ Rules:
     throw new Error("No response from AI");
   }
 
-  const parsed = JSON.parse(content.trim()) as AnalysisResult;
+  let jsonStr = content.trim();
+  // Strip markdown code fences if AI wraps in them despite instructions
+  if (jsonStr.startsWith("```")) {
+    jsonStr = jsonStr.replace(/^```[a-z]*\n?/, "").replace(/\n?```$/, "").trim();
+  }
+
+  const parsed = JSON.parse(jsonStr) as AnalysisResult;
 
   if (typeof parsed.overallTrustScore !== "number") {
     throw new Error("Invalid analysis result structure");
@@ -133,6 +158,15 @@ Rules:
     parsed.verdict = "caution";
   } else {
     parsed.verdict = "avoid";
+  }
+
+  // Generate search URLs for alternatives that don't have real URLs
+  if (parsed.alternatives) {
+    for (const alt of parsed.alternatives) {
+      if (!alt.url) {
+        alt.url = generateSearchUrl(alt.platform, alt.title);
+      }
+    }
   }
 
   return parsed;
