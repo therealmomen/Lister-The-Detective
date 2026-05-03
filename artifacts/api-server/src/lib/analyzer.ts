@@ -85,6 +85,14 @@ function extractProductNameFromUrl(url: string): string | null {
         return slug.replace(/-/g, " ").replace(/\s+/g, " ").trim();
       }
     }
+    if (parsed.hostname.includes("ebay.")) {
+      const pIndex = segments.findIndex((s) => s === "p");
+      if (pIndex >= 0 && segments[pIndex + 1]) {
+        const itemId = parsed.searchParams.get("iid");
+        const base = segments[pIndex + 1];
+        return itemId ? `${base} (${itemId})` : base;
+      }
+    }
     const itmIndex = segments.findIndex((s) => s === "itm");
     if (itmIndex >= 0 && segments[itmIndex + 1] && !/^\d+$/.test(segments[itmIndex + 1])) {
       return segments[itmIndex + 1].replace(/-/g, " ").replace(/\s+/g, " ").trim();
