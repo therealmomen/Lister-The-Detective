@@ -16,10 +16,10 @@ export default function About() {
           </div>
           <h1 className="text-4xl sm:text-5xl font-black tracking-tighter mb-6">
             Born from 3 hours<br />
-            <span className="text-primary">lost in Amazon Egypt.</span>
+            <span className="text-primary">lost in Amazon.</span>
           </h1>
           <p className="text-muted-foreground font-mono text-sm sm:text-base leading-relaxed max-w-2xl mx-auto">
-            One afternoon, looking for a simple laptop cooling pad in Egypt, I spent three hours going in circles — dozens of listings, conflicting reviews, unknown brands, suspicious specs, and no way to know who to trust. I bought the wrong one. Lister the Detective exists so that never happens to anyone again.
+            One afternoon, looking for a simple laptop cooling pad, I spent three hours going in circles — dozens of listings, conflicting reviews, unknown brands, suspicious specs, and no way to know who to trust. I bought the wrong one. Lister the Detective exists so that never happens to anyone again.
           </p>
         </div>
       </section>
@@ -27,8 +27,8 @@ export default function About() {
       {/* The Problem */}
       <section className="py-16 bg-background">
         <div className="container max-w-4xl mx-auto px-4">
-          <h2 className="text-2xl font-bold mb-2 tracking-tight">The problem with online shopping in Egypt</h2>
-          <p className="text-muted-foreground font-mono text-sm mb-10">And really, anywhere that's not a major Western market.</p>
+          <h2 className="text-2xl font-bold mb-2 tracking-tight">The problem with online shopping</h2>
+          <p className="text-muted-foreground font-mono text-sm mb-10">And really, anywhere with messy listings and weak buyer protection.</p>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-12">
             {[
@@ -133,7 +133,7 @@ export default function About() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-12">
             {[
               { name: "Amazon", url: "amazon.com", logo: "/logos/amazon.png" },
-              { name: "Noon Egypt", url: "noon.com", logo: "/logos/noon.png" },
+              { name: "Noon", url: "noon.com", logo: "/logos/noon.png" },
               { name: "eBay", url: "ebay.com", logo: "/logos/ebay.png" },
               { name: "Alibaba", url: "alibaba.com", logo: "/logos/alibaba.png" },
             ].map((p) => (

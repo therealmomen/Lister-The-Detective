@@ -172,7 +172,7 @@ Find and summarize:
 2. Recent customer reviews and complaints (2024-2025)
 3. Any known defects, recalls, or quality issues reported recently
 4. Brand reputation updates or news
-5. Availability on major platforms (Amazon Egypt, Noon, eBay)
+5. Availability on major platforms and regional variants
 6. Any price drops, deals, or alternatives spotted recently
 7. Listing identifiers, model numbers, seller name, ASIN, and warranty clues if present
 
@@ -227,7 +227,7 @@ export async function analyzeProduct(
 
   const platformDetected = url ? detectPlatform(url) : null;
   const platformsForAlts = platforms.length > 0 ? platforms : ["amazon", "ebay"];
-  const countryContext = country === "EG" ? "Egypt" : country || "international";
+  const countryContext = country === "EG" ? "global" : country || "global";
   const extractedName = url ? extractProductNameFromUrl(url) : (query ?? null);
   const requestedName = query ?? extractedName ?? null;
   const canIdentify = !isUnknownText(extractedName) || !isUnknownText(requestedName) || !!platformDetected;
@@ -265,15 +265,15 @@ export async function analyzeProduct(
   const liveDataUnavailable = !!extractedName && !liveContext;
 
   const categoryHints: Record<string, string> = {
-    audio: "Focus on ANC claims, driver size vs. price, codec support (aptX, LDAC), and Egypt warranty. Sony, Bose, Sennheiser have strong track records.",
-    laptop: "Check thermal design, RAM/storage specs, CPU tier, and local service centers. Cooling pads quality control varies enormously.",
-    smartphone: "Check IMEI for Egypt, software update commitment, official distributor vs. grey import, processor benchmark vs. price.",
-    wearable: "Check if health sensors are medically validated, GPS accuracy claims, and companion app Egypt availability.",
-    camera: "Verify sensor size claims, original brand vs. clone, regional warranty.",
+    audio: "Focus on ANC claims, driver size vs. price, codec support (aptX, LDAC), and warranty coverage. Sony, Bose, Sennheiser have strong track records.",
+    laptop: "Check thermal design, RAM/storage specs, CPU tier, and service support. Cooling pads quality control varies enormously.",
+    smartphone: "Check software update commitment, official distributor vs. grey import, processor benchmark vs. price.",
+    wearable: "Check if health sensors are medically validated, GPS accuracy claims, and companion app availability.",
+    camera: "Verify sensor size claims, original brand vs. clone, and warranty terms.",
     accessory: "Chargers/cables are high-risk — uncertified devices can damage hardware. Look for GCC/CE certification.",
     computer_peripheral: "Switch type for keyboards, DPI accuracy for mice, build quality.",
     display: "Panel type (IPS/TN/VA), response time accuracy, HDR certification legitimacy.",
-    electronics: "Brand reputation, regional warranty, spec-to-price ratio.",
+    electronics: "Brand reputation, warranty terms, spec-to-price ratio.",
   };
 
   const productContext = [
@@ -301,7 +301,7 @@ RULES (never break):
 - When uncertain about specifics not in the live data, say so honestly.
 - NEVER hallucinate numbers or facts not supported by live data or training knowledge.`;
 
-  const prompt = `You are Lister the Detective — AI product analyst for shoppers in ${countryContext}.
+  const prompt = `You are Lister the Detective — AI product analyst for a global audience.
 
 WHAT YOU ARE ANALYZING:
 ${productContext}
@@ -342,7 +342,7 @@ Return ONLY raw JSON (English, no markdown):
   "sellerAnalysis": "Platform norms + any live findings about this seller/product's current status",
   "specsAnalysis": "Spec check — flag anything unrealistic vs. price, use live data if specs were found",
   "reviewsAnalysis": "Review patterns from live data (if found) + category-level authenticity guidance",
-  "brandTrustAnalysis": "Brand reputation from live data + training: origin, quality, warranty in ${countryContext}",
+  "brandTrustAnalysis": "Brand reputation from live data + training: origin, quality, warranty relevance across markets",
   "redFlags": [
     { "severity": "high|medium|low", "description": "Specific concern with evidence", "basis": "live_data|known_fact|pattern|inference" }
   ],
