@@ -154,7 +154,7 @@ Find and summarize:
 Be concise, factual, and cite what you found. If information is not available, say so.`,
       metadata: { searchQuery },
     }),
-    20_000
+    70_000
   );
 
   let contextText = "";
