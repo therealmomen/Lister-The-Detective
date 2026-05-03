@@ -176,7 +176,7 @@ async function fetchLiveContext(
       input: `You are a product research assistant. Search the web exhaustively and find current, factual information about: "${productName}".
 
 Find and summarize:
-1. Current prices in ${country} (in EGP if available)
+1. Current prices in the relevant market (use local currency if available)
 2. Recent customer reviews and complaints (2024-2025)
 3. Any known defects, recalls, or quality issues reported recently
 4. Brand reputation updates or news
@@ -341,7 +341,7 @@ Return ONLY raw JSON (English, no markdown):
   "productTitle": "Official product name",
   "brand": "Brand or 'Unknown Brand'",
   "platform": ${platformDetected ? `"${platformDetected}"` : "detected platform or null"},
-  "estimatedPrice": "EGP range from live data if available, else training estimate or 'Verify price'",
+  "estimatedPrice": "Local-currency range from live data if available, else training estimate or 'Verify price'",
   "overallTrustScore": <0-100 integer>,
   "verdict": "recommended|caution|avoid",
   "summary": "2-3 sentences covering what you found (live + training), key concern or strength, and buying guidance",
