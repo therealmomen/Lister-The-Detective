@@ -32,6 +32,7 @@ export interface AnalysisResult {
 }
 
 const SHORT_URL_PATTERNS = ["amzn.eu", "amzn.to", "amzn.com/d", "a.co/", "bit.ly", "tinyurl.com", "goo.gl", "t.co", "ow.ly", "rb.gy"];
+const UNKNOWN_LABELS = ["unknown", "unknown brand", "n/a", "na", "none", "not found", "unidentified", "generic"];
 
 export function isShortUrl(url: string): boolean {
   const lower = url.toLowerCase();
@@ -116,6 +117,12 @@ function extractJson(raw: string): string {
   return s;
 }
 
+function isUnknownText(value: string | null | undefined): boolean {
+  if (!value) return true;
+  const normalized = value.trim().toLowerCase();
+  return UNKNOWN_LABELS.some((label) => normalized === label || normalized.includes(label));
+}
+
 /** Use OpenAI Responses API with web_search_preview to fetch live product context */
 async function fetchLiveContext(
   productName: string,
@@ -127,14 +134,15 @@ async function fetchLiveContext(
       `"${productName}"`,
       platform ? `site:${platform}.com OR site:${platform}.eg` : "",
       `price ${country} reviews issues 2025`,
+      `seller warranty specs listing ASIN model`,
     ].filter(Boolean).join(" ");
 
     const response = await withTimeout(
       (openai as any).responses.create({
-        model: "gpt-4o",
+        model: "gpt-5.4",
         tools: [{ type: "web_search_preview" }],
         tool_choice: { type: "web_search_preview" },
-        input: `You are a product research assistant. Search the web and find current, factual information about: "${productName}".
+        input: `You are a product research assistant. Search the web exhaustively and find current, factual information about: "${productName}".
 
 Find and summarize:
 1. Current prices in ${country} (in EGP if available)
@@ -143,8 +151,10 @@ Find and summarize:
 4. Brand reputation updates or news
 5. Availability on major platforms (Amazon Egypt, Noon, eBay)
 6. Any price drops, deals, or alternatives spotted recently
+7. Listing identifiers, model numbers, seller name, ASIN, and warranty clues if present
 
 Be concise, factual, and cite what you found. If information is not available, say so.`,
+        metadata: { searchQuery },
       }),
       20_000
     );
@@ -202,6 +212,33 @@ export async function analyzeProduct(
   const platformsForAlts = platforms.length > 0 ? platforms : ["amazon", "ebay"];
   const countryContext = country === "EG" ? "Egypt" : country || "international";
   const extractedName = url ? extractProductNameFromUrl(url) : (query ?? null);
+  const requestedName = query ?? extractedName ?? null;
+  const canIdentify = !isUnknownText(extractedName) || !isUnknownText(requestedName) || !!platformDetected;
+  if (!canIdentify) {
+    return {
+      productTitle: "Under Development",
+      brand: "Unknown",
+      platform: platformDetected,
+      estimatedPrice: null,
+      overallTrustScore: 0,
+      verdict: "avoid",
+      summary: "This product could not be identified with enough confidence to produce a reliable analysis. The project is still under development for this type of listing.",
+      disclaimer: "This analysis could not confidently identify the item. The project is still under development for unidentified listings.",
+      liveDataUsed: false,
+      sellerAnalysis: "Insufficient listing detail to evaluate seller reliability.",
+      specsAnalysis: "Insufficient listing detail to compare specifications.",
+      reviewsAnalysis: "Insufficient listing detail to verify review patterns.",
+      brandTrustAnalysis: "Insufficient listing detail to assess brand trust.",
+      redFlags: [
+        {
+          severity: "high",
+          description: "The item could not be identified confidently from the available listing details.",
+          basis: "inference",
+        },
+      ],
+      alternatives: [],
+    };
+  }
   const category = detectCategory(extractedName ?? "");
 
   // ── Phase 1: Fetch live context from web search (best-effort, ~15s budget) ──
@@ -254,6 +291,12 @@ ${liveSection}
 
 CATEGORY GUIDANCE:
 ${categoryHints[category] ?? categoryHints.electronics}
+
+IDENTIFICATION RULES:
+- Prefer exact product titles, model numbers, seller names, and platform listing clues.
+- If you can infer the product from ASIN, model, category, seller, or listing text, do so.
+- Only return "Unknown" when there is truly no reliable evidence.
+- If evidence is insufficient for a trustworthy conclusion, return a clear "under development" style answer instead of pretending certainty.
 
 ANALYSIS MISSION:
 Use the live web search results (if available) as your primary source of truth for current prices, reviews, and issues.

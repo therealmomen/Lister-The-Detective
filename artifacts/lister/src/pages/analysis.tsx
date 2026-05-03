@@ -95,7 +95,7 @@ export default function Analysis() {
       analysis?.url ? `URL:     ${analysis.url}` : "",
       ``,
       `VERDICT: ${result.verdict?.toUpperCase()} (Trust Score: ${result.overallTrustScore}/100)`,
-      `Price:   ${result.estimatedPrice ?? "Unknown"}`,
+      `Price:   ${result.estimatedPrice ?? "Under development"}`,
       ``,
       `SUMMARY`,
       result.summary,
@@ -272,7 +272,7 @@ export default function Analysis() {
             </div>
             <div className="flex-1 lg:w-full lg:pt-4 lg:border-t lg:border-border/50 lg:mt-4">
               <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground block mb-1">Est. Price</span>
-              <span className="text-xl font-bold">{result.estimatedPrice || "Unknown"}</span>
+              <span className="text-xl font-bold">{result.estimatedPrice || "Under development"}</span>
             </div>
           </CardContent>
         </Card>
