@@ -9,6 +9,7 @@ export interface AnalysisResult {
   verdict: "recommended" | "caution" | "avoid";
   summary: string;
   disclaimer: string;
+  liveDataUsed: boolean;
   sellerAnalysis: string;
   specsAnalysis: string;
   reviewsAnalysis: string;
@@ -16,7 +17,7 @@ export interface AnalysisResult {
   redFlags: Array<{
     severity: "low" | "medium" | "high";
     description: string;
-    basis: "known_fact" | "pattern" | "inference";
+    basis: "known_fact" | "pattern" | "inference" | "live_data";
   }>;
   alternatives: Array<{
     title: string;
@@ -62,12 +63,17 @@ function extractProductNameFromUrl(url: string): string | null {
     if (itmIndex >= 0 && segments[itmIndex + 1] && !/^\d+$/.test(segments[itmIndex + 1])) {
       return segments[itmIndex + 1].replace(/-/g, " ").replace(/\s+/g, " ").trim();
     }
+    // Noon: /product-name-pXXXX
+    const noonSlug = segments.find((s) => s.includes("-p") && /p\d+$/.test(s));
+    if (noonSlug) {
+      return noonSlug.replace(/-p\d+$/, "").replace(/-/g, " ").trim();
+    }
     return null;
   } catch { return null; }
 }
 
-function detectCategory(productName: string, query: string): string {
-  const text = (productName + " " + query).toLowerCase();
+function detectCategory(productName: string): string {
+  const text = productName.toLowerCase();
   if (/headphone|earphone|earbuds|airpod|speaker|wh-|wf-|xm\d/i.test(text)) return "audio";
   if (/laptop|notebook|macbook|thinkpad|cooling pad|cooler/i.test(text)) return "laptop";
   if (/phone|iphone|samsung|galaxy|pixel|xiaomi|redmi|realme/i.test(text)) return "smartphone";
@@ -91,10 +97,9 @@ function generateSearchUrl(platform: string, productTitle: string): string {
   }
 }
 
-/** Wrap a promise with a hard timeout */
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Analysis timed out after ${ms / 1000}s. Please try again.`)), ms);
+    const timer = setTimeout(() => reject(new Error(`Timed out after ${ms / 1000}s`)), ms);
     promise.then(
       (val) => { clearTimeout(timer); resolve(val); },
       (err) => { clearTimeout(timer); reject(err); }
@@ -102,18 +107,71 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   });
 }
 
-/** Strip markdown fences and extract JSON from AI response */
 function extractJson(raw: string): string {
   let s = raw.trim();
-  // Remove markdown code fences
   s = s.replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "").trim();
-  // Find first { and last }
   const start = s.indexOf("{");
   const end = s.lastIndexOf("}");
-  if (start !== -1 && end !== -1 && end > start) {
-    return s.slice(start, end + 1);
-  }
+  if (start !== -1 && end !== -1 && end > start) return s.slice(start, end + 1);
   return s;
+}
+
+/** Use OpenAI Responses API with web_search_preview to fetch live product context */
+async function fetchLiveContext(
+  productName: string,
+  platform: string | null,
+  country: string
+): Promise<string | null> {
+  try {
+    const searchQuery = [
+      `"${productName}"`,
+      platform ? `site:${platform}.com OR site:${platform}.eg` : "",
+      `price ${country} reviews issues 2025`,
+    ].filter(Boolean).join(" ");
+
+    const response = await withTimeout(
+      (openai as any).responses.create({
+        model: "gpt-4o",
+        tools: [{ type: "web_search_preview" }],
+        tool_choice: { type: "web_search_preview" },
+        input: `You are a product research assistant. Search the web and find current, factual information about: "${productName}".
+
+Find and summarize:
+1. Current prices in ${country} (in EGP if available)
+2. Recent customer reviews and complaints (2024-2025)  
+3. Any known defects, recalls, or quality issues reported recently
+4. Brand reputation updates or news
+5. Availability on major platforms (Amazon Egypt, Noon, eBay)
+6. Any price drops, deals, or alternatives spotted recently
+
+Be concise, factual, and cite what you found. If information is not available, say so.`,
+      }),
+      20_000
+    );
+
+    // Extract text from Responses API output
+    let contextText = "";
+    const output = (response as any).output ?? [];
+    for (const item of output) {
+      if (item.type === "message" && Array.isArray(item.content)) {
+        for (const c of item.content) {
+          if (c.type === "output_text" && c.text) {
+            contextText += c.text + "\n";
+          }
+        }
+      }
+    }
+
+    // Also check output_text shorthand
+    if (!contextText && (response as any).output_text) {
+      contextText = (response as any).output_text;
+    }
+
+    return contextText.trim() || null;
+  } catch (err) {
+    // Graceful fallback — live search is best-effort
+    return null;
+  }
 }
 
 async function callAI(prompt: string, systemPrompt: string): Promise<string> {
@@ -143,19 +201,24 @@ export async function analyzeProduct(
   const platformDetected = url ? detectPlatform(url) : null;
   const platformsForAlts = platforms.length > 0 ? platforms : ["amazon", "ebay"];
   const countryContext = country === "EG" ? "Egypt" : country || "international";
-  const extractedName = url ? extractProductNameFromUrl(url) : null;
-  const category = detectCategory(extractedName ?? "", query ?? "");
+  const extractedName = url ? extractProductNameFromUrl(url) : (query ?? null);
+  const category = detectCategory(extractedName ?? "");
+
+  // ── Phase 1: Fetch live context from web search (best-effort, ~15s budget) ──
+  const liveContext = extractedName
+    ? await fetchLiveContext(extractedName, platformDetected, countryContext)
+    : null;
 
   const categoryHints: Record<string, string> = {
-    audio: "Pay special attention to ANC claims, driver size vs. price, codec support (aptX, LDAC), and brand warranty in Egypt. Sony, Bose, and Sennheiser have strong track records; generic brands at similar price points almost always underdeliver.",
-    laptop: "Check thermal design claims vs. price, RAM/storage specs, CPU tier, and whether the brand has local service centers in Egypt. Cooling pads are a common generic market — quality control varies enormously.",
-    smartphone: "Focus on IMEI status for Egypt, software update commitment, local warranty from official distributor vs. grey import, and processor benchmark vs. listed price.",
-    wearable: "Check if health sensors are medically validated, GPS accuracy claims vs. price, and whether the companion app works in Egypt.",
-    camera: "Verify sensor size claims, whether it's original brand vs. clone, and regional warranty coverage.",
-    accessory: "Chargers and cables are a high-risk category — uncertified devices can damage other devices. Look for GCC/CE certification.",
-    computer_peripheral: "Ergonomics and build quality vary widely; check switch type for keyboards, DPI accuracy for mice.",
-    display: "Panel type (IPS vs. TN vs. VA), response time accuracy, and HDR certification legitimacy.",
-    electronics: "Apply general rules: brand reputation, regional warranty, spec-to-price ratio.",
+    audio: "Focus on ANC claims, driver size vs. price, codec support (aptX, LDAC), and Egypt warranty. Sony, Bose, Sennheiser have strong track records.",
+    laptop: "Check thermal design, RAM/storage specs, CPU tier, and local service centers. Cooling pads quality control varies enormously.",
+    smartphone: "Check IMEI for Egypt, software update commitment, official distributor vs. grey import, processor benchmark vs. price.",
+    wearable: "Check if health sensors are medically validated, GPS accuracy claims, and companion app Egypt availability.",
+    camera: "Verify sensor size claims, original brand vs. clone, regional warranty.",
+    accessory: "Chargers/cables are high-risk — uncertified devices can damage hardware. Look for GCC/CE certification.",
+    computer_peripheral: "Switch type for keyboards, DPI accuracy for mice, build quality.",
+    display: "Panel type (IPS/TN/VA), response time accuracy, HDR certification legitimacy.",
+    electronics: "Brand reputation, regional warranty, spec-to-price ratio.",
   };
 
   const productContext = [
@@ -166,76 +229,78 @@ export async function analyzeProduct(
     `Detected category: ${category}`,
   ].filter(Boolean).join("\n");
 
-  const systemPrompt = `You are Lister the Detective — a product research AI that ONLY states things it actually knows from training data.
-RULES (never break these):
-- NEVER hallucinate specific numbers, ratings, or listing details you cannot verify from training knowledge.
-- ALWAYS respond in ENGLISH ONLY — never Arabic or any other language, regardless of product origin or region.
-- ALWAYS respond with raw JSON only — no markdown, no code blocks, no preamble, no explanation outside the JSON.
-- When uncertain about something specific, express that uncertainty honestly ("not confirmed in training data", "verify before purchasing") rather than inventing a number.`;
+  const liveSection = liveContext
+    ? `\n\nLIVE WEB SEARCH RESULTS (fetched right now — use this as primary evidence):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${liveContext}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+When referencing facts from the live search above, set the red flag basis to "live_data".
+Prices, reviews, and issues from the live search supersede your training data estimates.`
+    : "\n\n[No live web data available — analysis based on training knowledge only.]";
 
-  const prompt = `You are Lister the Detective — an AI product research analyst for shoppers in ${countryContext}.
+  const systemPrompt = `You are Lister the Detective — a product research AI.
+RULES (never break):
+- ALWAYS respond in ENGLISH ONLY.
+- ALWAYS respond with raw JSON only — no markdown, no code blocks, no preamble.
+- When you have live web search results, prioritize them over training knowledge.
+- When uncertain about specifics not in the live data, say so honestly.
+- NEVER hallucinate numbers or facts not supported by live data or training knowledge.`;
+
+  const prompt = `You are Lister the Detective — AI product analyst for shoppers in ${countryContext}.
 
 WHAT YOU ARE ANALYZING:
 ${productContext}
+${liveSection}
 
-CATEGORY GUIDANCE FOR THIS ANALYSIS:
+CATEGORY GUIDANCE:
 ${categoryHints[category] ?? categoryHints.electronics}
 
-YOUR KNOWLEDGE MODEL:
-You cannot browse URLs or access live data. You work from training knowledge about:
-- Brand histories, reputations, and documented quality patterns
-- Typical seller behavior and platform norms (Amazon EG, Noon, eBay, Alibaba)
-- Product category quality benchmarks and common failure modes
-- Egyptian market pricing, warranty realities, and import patterns
-- Known model numbers, their real-world track records, and documented issues
-
-HONESTY RULES (NON-NEGOTIABLE):
-1. NEVER invent specific numbers (seller ratings, review counts, exact prices). Use ranges or "verify on platform."
-2. NEVER say you "checked the seller" or "viewed the listing" — you have not.
-3. Unknown brands = explicitly flag them as unknown and explain the risk.
-4. Every red flag must declare its basis: known_fact / pattern / inference.
-5. Trust scores reflect actual knowledge only. Unknown brand in risky category = 20–40. Well-documented flagship = 70–90.
-6. Price: use Egyptian market ranges from training data, or "Verify price — not reliably in training data."
-
 ANALYSIS MISSION:
-Part 1 — Analyze the product: seller norms, spec reality, review trustworthiness, brand reputation.
-Part 2 — Find the SAME product on other platforms (not alternatives — the same item from a better or different source). If unsure about availability, say so in whyBetter.
+Use the live web search results (if available) as your primary source of truth for current prices, reviews, and issues.
+Fill in gaps with your training knowledge about brand reputation, platform norms, and product category patterns.
 
-Return ONLY raw JSON, English only, no markdown:
+HONESTY RULES:
+1. Facts from live search: cite them confidently, set basis to "live_data"
+2. Facts from training: distinguish clearly, set basis to "known_fact" or "pattern"
+3. Logical deductions: set basis to "inference"
+4. NEVER invent numbers not supported by either live data or solid training knowledge
+
+Return ONLY raw JSON (English, no markdown):
 {
-  "productTitle": "Official product name based on URL/query",
-  "brand": "Brand name or 'Unknown Brand'",
+  "productTitle": "Official product name",
+  "brand": "Brand or 'Unknown Brand'",
   "platform": ${platformDetected ? `"${platformDetected}"` : "detected platform or null"},
-  "estimatedPrice": "EGP range or 'Verify price — not in training data'",
-  "overallTrustScore": <0-100 integer, strictly knowledge-based>,
+  "estimatedPrice": "EGP range from live data if available, else training estimate or 'Verify price'",
+  "overallTrustScore": <0-100 integer>,
   "verdict": "recommended|caution|avoid",
-  "summary": "2-3 honest English sentences covering: what you know, the key concern or strength, and buying guidance",
-  "disclaimer": "Single sentence: what this analysis is based on and what the user must verify directly on the platform",
-  "sellerAnalysis": "Platform norms for this product type, return/refund policies, what to verify about the actual seller",
-  "specsAnalysis": "Are specs consistent with a real known product? Any red flags in the spec sheet relative to price tier?",
-  "reviewsAnalysis": "Review authenticity patterns for this brand/category. What should the buyer look for?",
-  "brandTrustAnalysis": "Everything known about this brand: origin, quality track record, warranty in ${countryContext}, distributor presence",
+  "summary": "2-3 sentences covering what you found (live + training), key concern or strength, and buying guidance",
+  "disclaimer": "Single sentence: what sources this analysis used (live web search + training knowledge) and what to verify",
+  "liveDataUsed": ${liveContext ? "true" : "false"},
+  "sellerAnalysis": "Platform norms + any live findings about this seller/product's current status",
+  "specsAnalysis": "Spec check — flag anything unrealistic vs. price, use live data if specs were found",
+  "reviewsAnalysis": "Review patterns from live data (if found) + category-level authenticity guidance",
+  "brandTrustAnalysis": "Brand reputation from live data + training: origin, quality, warranty in ${countryContext}",
   "redFlags": [
-    { "severity": "high|medium|low", "description": "Specific grounded concern", "basis": "known_fact|pattern|inference" }
+    { "severity": "high|medium|low", "description": "Specific concern with evidence", "basis": "live_data|known_fact|pattern|inference" }
   ],
   "alternatives": [
     {
       "title": "Same product on this platform",
       "platform": "one of: ${platformsForAlts.join(", ")}",
       "url": null,
-      "price": "EGP estimate or 'Varies'",
+      "price": "From live data if found, else 'Varies'",
       "rating": null,
       "brand": "Same brand",
-      "whyBetter": "Why this platform/seller is a better buy for this specific product",
+      "whyBetter": "Specific reason — platform advantage, price difference, or return policy",
       "trustScore": <0-100>
     }
   ]
 }
 
-Score thresholds: 75-100 = recommended, 45-74 = caution, 0-44 = avoid. Verdict must match score.
-Provide 2-4 specific red flags. Provide 3-5 alternatives of the SAME product across: ${platformsForAlts.join(", ")}.`;
+Score: 75-100 = recommended, 45-74 = caution, 0-44 = avoid. Verdict must match score.
+Provide 2-4 red flags. Provide 3-5 alternatives of the SAME product across: ${platformsForAlts.join(", ")}.`;
 
-  // Attempt with up to 2 retries on JSON parse failure
+  // ── Phase 2: Main analysis with retry ────────────────────────────────────
   const MAX_RETRIES = 2;
   let lastError: Error | null = null;
 
@@ -254,7 +319,10 @@ Provide 2-4 specific red flags. Provide 3-5 alternatives of the SAME product acr
       else if (parsed.overallTrustScore >= 45) parsed.verdict = "caution";
       else parsed.verdict = "avoid";
 
-      // Generate search URLs for all alternatives
+      // Ensure liveDataUsed is accurate
+      parsed.liveDataUsed = !!liveContext;
+
+      // Generate search URLs for alternatives
       if (parsed.alternatives) {
         for (const alt of parsed.alternatives) {
           if (!alt.url) alt.url = generateSearchUrl(alt.platform, alt.title);
@@ -264,7 +332,6 @@ Provide 2-4 specific red flags. Provide 3-5 alternatives of the SAME product acr
       return parsed;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
-      // Don't retry timeouts — they are definitive
       if (lastError.message.includes("timed out")) break;
       if (attempt < MAX_RETRIES) {
         await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));

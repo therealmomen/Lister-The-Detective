@@ -10,7 +10,7 @@ import { PlatformIcon } from "@/components/platform-icon";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, ExternalLink, AlertTriangle, ShieldAlert, ShieldCheck,
-  Search, ScanLine, FileText, CheckCircle2, Activity, Copy, Check,
+  Search, ScanLine, FileText, CheckCircle2, Activity, Copy, Check, Wifi,
 } from "lucide-react";
 
 const platformAccent: Record<string, string> = {
@@ -234,6 +234,12 @@ export default function Analysis() {
               </Badge>
             )}
             <Badge variant="secondary" className="px-3 py-1 font-mono uppercase tracking-wider text-xs">{result.brand}</Badge>
+            {result.liveDataUsed && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-500/15 border border-green-500/30 text-green-400 font-mono text-[10px] uppercase tracking-wider">
+                <Wifi className="w-3 h-3" />
+                Live Data
+              </span>
+            )}
           </div>
 
           <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold tracking-tight leading-tight">{result.productTitle}</h1>

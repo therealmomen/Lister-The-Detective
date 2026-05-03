@@ -84,6 +84,7 @@ export default function About() {
                 label: "What it CAN do",
                 positive: true,
                 points: [
+                  "Search the web in real time for current prices, recent reviews, and known product issues",
                   "Tell you everything known about a brand's reputation, manufacturing quality, and track record",
                   "Flag when a product's specs are implausible for its price tier (physics doesn't lie)",
                   "Explain typical seller behavior and platform norms for a product category",
@@ -96,10 +97,9 @@ export default function About() {
                 label: "What it CANNOT do",
                 positive: false,
                 points: [
-                  "Browse the listing URL or read the actual page (it uses its training knowledge, not live data)",
-                  "Verify the specific seller's current rating or recent order history",
-                  "Check live prices — always verify on the platform before buying",
-                  "Guarantee a product is in stock or available on a given platform",
+                  "Access the actual listing page or read your specific seller's account details",
+                  "Guarantee live prices are accurate by the time you check — always verify before buying",
+                  "Guarantee a product is in stock or available on a given platform right now",
                   "Replace your own judgment — use this as one strong input, not the final word",
                 ],
               },
