@@ -132,7 +132,7 @@ export default function About() {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-12">
             {[
-              { name: "Amazon Egypt", url: "amazon.eg", logo: "/logos/amazon.png" },
+              { name: "Amazon", url: "amazon.com", logo: "/logos/amazon.png" },
               { name: "Noon Egypt", url: "noon.com", logo: "/logos/noon.png" },
               { name: "eBay", url: "ebay.com", logo: "/logos/ebay.png" },
               { name: "Alibaba", url: "alibaba.com", logo: "/logos/alibaba.png" },
