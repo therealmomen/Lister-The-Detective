@@ -348,7 +348,7 @@ export default function Analysis() {
       {/* Alternatives */}
       {result.alternatives && result.alternatives.length > 0 && (
         <div className={`transition-all duration-500 delay-300 ${revealed ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
-          <div className="flex items-center justify-between mb-5 pb-4 border-b border-border/50">
+          <div className="flex items-center justify-between mt-2 mb-5 pb-4 border-b border-border/50">
             <div>
               <h2 className="text-xl font-bold">Same Product, Better Source</h2>
               <p className="text-muted-foreground font-mono text-xs mt-0.5 uppercase tracking-wider">Tap any card to search that platform</p>
