@@ -97,7 +97,7 @@ export default function About() {
                 label: "What it CANNOT do",
                 positive: false,
                 points: [
-                  "Access the actual listing page or read your specific seller's account details",
+                  "Access the actual listing page or read your specific seller's account details (yet)",
                   "Guarantee live prices are accurate by the time you check — always verify before buying",
                   "Guarantee a product is in stock or available on a given platform right now",
                   "Replace your own judgment — use this as one strong input, not the final word",
