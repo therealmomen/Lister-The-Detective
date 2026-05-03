@@ -129,24 +129,22 @@ async function fetchLiveContext(
   platform: string | null,
   country: string
 ): Promise<string | null> {
-  try {
-    const searchQuery = [
+  const searchQuery = [
       `"${productName}"`,
       platform ? `site:${platform}.com OR site:${platform}.eg` : "",
       `price ${country} reviews issues 2025`,
       `seller warranty specs listing ASIN model`,
     ].filter(Boolean).join(" ");
-
-    const response = await withTimeout(
-      (openai as any).responses.create({
-        model: "gpt-5.4",
-        tools: [{ type: "web_search_preview" }],
-        tool_choice: { type: "web_search_preview" },
-        input: `You are a product research assistant. Search the web exhaustively and find current, factual information about: "${productName}".
+  const response = await withTimeout(
+    (openai as any).responses.create({
+      model: "gpt-5.4",
+      tools: [{ type: "web_search_preview" }],
+      tool_choice: { type: "web_search_preview" },
+      input: `You are a product research assistant. Search the web exhaustively and find current, factual information about: "${productName}".
 
 Find and summarize:
 1. Current prices in ${country} (in EGP if available)
-2. Recent customer reviews and complaints (2024-2025)  
+2. Recent customer reviews and complaints (2024-2025)
 3. Any known defects, recalls, or quality issues reported recently
 4. Brand reputation updates or news
 5. Availability on major platforms (Amazon Egypt, Noon, eBay)
@@ -154,34 +152,28 @@ Find and summarize:
 7. Listing identifiers, model numbers, seller name, ASIN, and warranty clues if present
 
 Be concise, factual, and cite what you found. If information is not available, say so.`,
-        metadata: { searchQuery },
-      }),
-      20_000
-    );
+      metadata: { searchQuery },
+    }),
+    20_000
+  );
 
-    // Extract text from Responses API output
-    let contextText = "";
-    const output = (response as any).output ?? [];
-    for (const item of output) {
-      if (item.type === "message" && Array.isArray(item.content)) {
-        for (const c of item.content) {
-          if (c.type === "output_text" && c.text) {
-            contextText += c.text + "\n";
-          }
+  let contextText = "";
+  const output = (response as any).output ?? [];
+  for (const item of output) {
+    if (item.type === "message" && Array.isArray(item.content)) {
+      for (const c of item.content) {
+        if (c.type === "output_text" && c.text) {
+          contextText += c.text + "\n";
         }
       }
     }
-
-    // Also check output_text shorthand
-    if (!contextText && (response as any).output_text) {
-      contextText = (response as any).output_text;
-    }
-
-    return contextText.trim() || null;
-  } catch (err) {
-    // Graceful fallback — live search is best-effort
-    return null;
   }
+
+  if (!contextText && (response as any).output_text) {
+    contextText = (response as any).output_text;
+  }
+
+  return contextText.trim() || null;
 }
 
 async function callAI(prompt: string, systemPrompt: string): Promise<string> {
@@ -245,6 +237,7 @@ export async function analyzeProduct(
   const liveContext = extractedName
     ? await fetchLiveContext(extractedName, platformDetected, countryContext)
     : null;
+  const liveDataUnavailable = !!extractedName && !liveContext;
 
   const categoryHints: Record<string, string> = {
     audio: "Focus on ANC claims, driver size vs. price, codec support (aptX, LDAC), and Egypt warranty. Sony, Bose, Sennheiser have strong track records.",
@@ -297,6 +290,7 @@ IDENTIFICATION RULES:
 - If you can infer the product from ASIN, model, category, seller, or listing text, do so.
 - Only return "Unknown" when there is truly no reliable evidence.
 - If evidence is insufficient for a trustworthy conclusion, return a clear "under development" style answer instead of pretending certainty.
+- If live search failed, explicitly say that web data was unavailable and keep the answer conservative.
 
 ANALYSIS MISSION:
 Use the live web search results (if available) as your primary source of truth for current prices, reviews, and issues.
@@ -307,6 +301,7 @@ HONESTY RULES:
 2. Facts from training: distinguish clearly, set basis to "known_fact" or "pattern"
 3. Logical deductions: set basis to "inference"
 4. NEVER invent numbers not supported by either live data or solid training knowledge
+  5. If live data is unavailable, set "liveDataUsed" to false and call that out in the disclaimer
 
 Return ONLY raw JSON (English, no markdown):
 {
@@ -364,6 +359,9 @@ Provide 2-4 red flags. Provide 3-5 alternatives of the SAME product across: ${pl
 
       // Ensure liveDataUsed is accurate
       parsed.liveDataUsed = !!liveContext;
+      if (liveDataUnavailable && !parsed.disclaimer.toLowerCase().includes("web data")) {
+        parsed.disclaimer = `${parsed.disclaimer} Web data was unavailable for this analysis.`;
+      }
 
       // Generate search URLs for alternatives
       if (parsed.alternatives) {
