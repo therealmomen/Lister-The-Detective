@@ -122,7 +122,7 @@ function detectCategory(productName: string): string {
 function generateSearchUrl(platform: string, productTitle: string): string {
   const query = encodeURIComponent(productTitle);
   switch (platform.toLowerCase()) {
-    case "amazon":     return `https://www.amazon.eg/s?k=${query}`;
+    case "amazon":     return `https://www.amazon.com/s?k=${query}`;
     case "noon":       return `https://www.noon.com/egypt-en/search/?q=${query}`;
     case "ebay":       return `https://www.ebay.com/sch/i.html?_nkw=${query}`;
     case "alibaba":    return `https://www.alibaba.com/trade/search?SearchText=${query}`;
