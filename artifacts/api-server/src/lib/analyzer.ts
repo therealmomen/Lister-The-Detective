@@ -53,6 +53,31 @@ function extractProductNameFromUrl(url: string): string | null {
   try {
     const parsed = new URL(url);
     const segments = parsed.pathname.split("/").filter(Boolean);
+    const asinMatch = parsed.pathname.match(/\/dp\/([A-Z0-9]{10})(?:\/|$)/i);
+    const asin = asinMatch?.[1]?.toUpperCase() ?? null;
+
+    if (parsed.hostname.includes("amazon.")) {
+      const dpIndex = segments.findIndex((s) => s === "dp");
+      const slugParts =
+        dpIndex > 0
+          ? segments.slice(0, dpIndex)
+          : segments.filter((s) => s !== "dp" && s !== "gp" && s !== "product");
+      const slug = slugParts
+        .join(" ")
+        .replace(/^-\w\w\s+/, "")
+        .replace(/^\w\w\s+/, "")
+        .replace(/-/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (slug && slug.length > 2) {
+        const cleaned = slug.replace(/\b(en|ar|eg|us)\b/gi, "").replace(/\s+/g, " ").trim();
+        if (cleaned && !/^[A-Z0-9]{10}$/i.test(cleaned)) {
+          return asin ? `${cleaned} (${asin})` : cleaned;
+        }
+      }
+      return asin ?? null;
+    }
+
     const dpIndex = segments.findIndex((s) => s === "dp");
     if (dpIndex > 0) {
       const slug = segments[dpIndex - 1];
