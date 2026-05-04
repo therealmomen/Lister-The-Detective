@@ -1,4 +1,4 @@
-import { openai } from "@workspace/integrations-openai-ai-server";
+import { geminiModel, geminiSearchModel } from "@workspace/integrations-google-gemini-ai-server";
 
 export interface AnalysisResult {
   productTitle: string;
@@ -156,70 +156,62 @@ function isUnknownText(value: string | null | undefined): boolean {
   return UNKNOWN_LABELS.some((label) => normalized === label || normalized.includes(label));
 }
 
-/** Use OpenAI Responses API with web_search_preview to fetch live product context */
+/** Use Gemini with Google Search tool to fetch live product context */
 async function fetchLiveContext(
   productName: string,
   platform: string | null,
   country: string
 ): Promise<string | null> {
   const searchQuery = [
-      `"${productName}"`,
-      platform ? `site:${platform}.com OR site:${platform}.eg` : "",
-      `price ${country} reviews issues 2025`,
-      `seller warranty specs listing ASIN model`,
-    ].filter(Boolean).join(" ");
-  const response = await withTimeout(
-    (openai as any).responses.create({
-      model: "gpt-5.4",
-      tools: [{ type: "web_search_preview" }],
-      tool_choice: { type: "web_search_preview" },
-      input: `You are a product research assistant. Search the web exhaustively and find current, factual information about: "${productName}".
+    `"${productName}"`,
+    platform ? `site:${platform}.com OR site:${platform}.eg` : "",
+    `price ${country} reviews issues 2025`,
+    `seller warranty specs listing ASIN model`,
+  ].filter(Boolean).join(" ");
 
-Find and summarize:
-1. Current prices in the relevant market (use local currency if available)
-2. Recent customer reviews and complaints (2024-2025)
-3. Any known defects, recalls, or quality issues reported recently
-4. Brand reputation updates or news
-5. Availability on major platforms and regional variants
-6. Any price drops, deals, or alternatives spotted recently
-7. Listing identifiers, model numbers, seller name, ASIN, and warranty clues if present
+  const prompt = `Search the web exhaustively and find current, factual information about: "${productName}".
+  Market Context: ${country}. Platform: ${platform ?? "Major retailers"}.
 
-Be concise, factual, and cite what you found. If information is not available, say so.`,
-      metadata: { searchQuery },
-    }),
-    70_000
-  );
+  Find and summarize:
+  1. Current prices in the relevant market (use local currency if available)
+  2. Recent customer reviews and complaints (2024-2025)
+  3. Any known defects, recalls, or quality issues reported recently
+  4. Brand reputation updates or news
+  5. Availability on major platforms and regional variants
+  6. Any price drops, deals, or alternatives spotted recently
+  7. Listing identifiers, model numbers, seller name, ASIN, and warranty clues if present
 
-  let contextText = "";
-  const output = (response as any).output ?? [];
-  for (const item of output) {
-    if (item.type === "message" && Array.isArray(item.content)) {
-      for (const c of item.content) {
-        if (c.type === "output_text" && c.text) {
-          contextText += c.text + "\n";
-        }
-      }
-    }
+  Be concise, factual, and cite what you found. If information is not available, say so.`;
+
+  try {
+    const result = await withTimeout(
+      geminiSearchModel.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+      }),
+      70_000
+    );
+
+    const response = result.response;
+    return response.text().trim() || null;
+  } catch (err) {
+    console.error("Error fetching live context with Gemini:", err);
+    return null;
   }
-
-  if (!contextText && (response as any).output_text) {
-    contextText = (response as any).output_text;
-  }
-
-  return contextText.trim() || null;
 }
 
 async function callAI(prompt: string, systemPrompt: string): Promise<string> {
-  const response = await openai.chat.completions.create({
-    model: "gpt-5.4",
-    max_completion_tokens: 4096,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: prompt },
+  const chat = geminiModel.startChat({
+    history: [
+      { role: "user", parts: [{ text: systemPrompt + "\n\nUnderstood." }] },
+      { role: "model", parts: [{ text: "Understood. I will provide only the raw JSON response as requested." }] },
     ],
   });
-  const content = response.choices[0]?.message?.content;
-  if (!content) throw new Error("No response from AI model");
+
+  const result = await chat.sendMessage(prompt);
+  const response = result.response;
+  const content = response.text();
+  
+  if (!content) throw new Error("No response from Gemini model");
   return content;
 }
 
